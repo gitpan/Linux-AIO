@@ -3,16 +3,19 @@
 #include "XSUB.h"
 
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sched.h>
 
+typedef void *InputStream; /* hack, but 5.6.1 is simply toooo old ;) */
+typedef void *OutputStream; /* hack, but 5.6.1 is simply toooo old ;) */
 typedef void *InOutStream; /* hack, but 5.6.1 is simply toooo old ;) */
 
 #define STACKSIZE 1024 /* yeah */
 
-enum { REQ_QUIT, REQ_READ, REQ_WRITE, REQ_OPEN, REQ_CLOSE };
+enum { REQ_QUIT, REQ_OPEN, REQ_CLOSE, REQ_READ, REQ_WRITE, REQ_STAT, REQ_LSTAT, REQ_FSTAT};
 
 typedef struct {
   char stack[STACKSIZE];
@@ -22,7 +25,6 @@ typedef struct {
   int type;
   aio_thread *thread;
 
-/* read/write */
   int fd;
   off_t offset;
   size_t length;
@@ -32,6 +34,8 @@ typedef struct {
   SV *data, *callback;
   void *dataptr;
   STRLEN dataoffset;
+
+  struct stat64 *statdata;
 } aio_cb;
 
 typedef aio_cb *aio_req;
@@ -82,6 +86,9 @@ read_write (pTHX_ int dowrite, int fd, off_t offset, size_t length,
   STRLEN svlen;
   char *svptr = SvPV (data, svlen);
 
+  SvUPGRADE (data, SVt_PV);
+  SvPOK_on (data);
+
   if (dataoffset < 0)
     dataoffset += svlen;
 
@@ -103,7 +110,7 @@ read_write (pTHX_ int dowrite, int fd, off_t offset, size_t length,
   if (length < 0)
     croak ("length must not be negative");
 
-  New (0, req, 1, aio_cb);
+  Newz (0, req, 1, aio_cb);
 
   if (!req)
     croak ("out of memory during aio_req allocation");
@@ -142,14 +149,38 @@ poll_cb (pTHX)
             SvCUR_set (req->data, req->dataoffset
                                   + req->result > 0 ? req->result : 0);
 
+          if (req->data)
+            SvREFCNT_dec (req->data);
+
+          if (req->type == REQ_STAT || req->type == REQ_LSTAT || req->type == REQ_FSTAT)
+            {
+              PL_laststype            = req->type == REQ_LSTAT ? OP_LSTAT : OP_STAT;
+              PL_laststatval          = req->result;
+              PL_statcache.st_dev     = req->statdata->st_dev;
+              PL_statcache.st_ino     = req->statdata->st_ino;
+              PL_statcache.st_mode    = req->statdata->st_mode;
+              PL_statcache.st_nlink   = req->statdata->st_nlink;
+              PL_statcache.st_uid     = req->statdata->st_uid;
+              PL_statcache.st_gid     = req->statdata->st_gid;
+              PL_statcache.st_rdev    = req->statdata->st_rdev;
+              PL_statcache.st_size    = req->statdata->st_size;
+              PL_statcache.st_atime   = req->statdata->st_atime;
+              PL_statcache.st_mtime   = req->statdata->st_mtime;
+              PL_statcache.st_ctime   = req->statdata->st_ctime;
+              PL_statcache.st_blksize = req->statdata->st_blksize;
+              PL_statcache.st_blocks  = req->statdata->st_blocks;
+
+              Safefree (req->statdata);
+            }
+
           PUSHMARK (SP);
           XPUSHs (sv_2mortal (newSViv (req->result)));
           PUTBACK;
           call_sv (req->callback, G_VOID);
           SPAGAIN;
           
-          SvREFCNT_dec (req->data);
-          SvREFCNT_dec (req->callback);
+          if (req->callback)
+            SvREFCNT_dec (req->callback);
 
           errno = errorno;
           nreqs--;
@@ -174,12 +205,20 @@ aio_proc(void *thr_arg)
   aio_req req;
   int errno;
 
+  /* this is very much x86 and kernel-specific :(:(:( */
   /* we rely on gcc's ability to create closures. */
-  _syscall3(int,lseek,int,fd,off_t,offset,int,whence)
-  _syscall3(int,read,int,fd,char *,buf,off_t,count)
-  _syscall3(int,write,int,fd,char *,buf,off_t,count)
+  _syscall3(int,read,int,fd,char *,buf,size_t,count)
+  _syscall3(int,write,int,fd,char *,buf,size_t,count)
+
   _syscall3(int,open,char *,pathname,int,flags,mode_t,mode)
   _syscall1(int,close,int,fd)
+
+  _syscall5(int,pread,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
+  _syscall5(int,pwrite,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
+
+  _syscall2(int,stat64, const char *, filename, struct stat64 *, buf)
+  _syscall2(int,lstat64, const char *, filename, struct stat64 *, buf)
+  _syscall2(int,fstat64, int, fd, struct stat64 *, buf)
 
   sigprocmask (SIG_SETMASK, &fullsigset, 0);
 
@@ -187,26 +226,22 @@ aio_proc(void *thr_arg)
   while (read (reqpipe[0], (void *)&req, sizeof (req)) == sizeof (req))
     {
       req->thread = thr;
-      errno = 0;
+      errno = 0; /* strictly unnecessary */
 
-      if (req->type == REQ_READ || req->type == REQ_WRITE)
-        {
-          if (lseek (req->fd, req->offset, SEEK_SET) == req->offset)
-            {
-              if (req->type == REQ_READ)
-                req->result = read (req->fd, req->dataptr, req->length);
-              else
-                req->result = write(req->fd, req->dataptr, req->length);
-            }
-        }
+      if (req->type == REQ_READ)
+        req->result = pread (req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32);
+      else if (req->type == REQ_WRITE)
+        req->result = pwrite(req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32);
       else if (req->type == REQ_OPEN)
-        {
-          req->result = open (req->dataptr, req->fd, req->mode);
-        }
+        req->result = open (req->dataptr, req->fd, req->mode);
       else if (req->type == REQ_CLOSE)
-        {
-          req->result = close (req->fd);
-        }
+        req->result = close (req->fd);
+      else if (req->type == REQ_STAT)
+        req->result = stat64 (req->dataptr, req->statdata);
+      else if (req->type == REQ_LSTAT)
+        req->result = lstat64 (req->dataptr, req->statdata);
+      else if (req->type == REQ_FSTAT)
+        req->result = fstat64 (req->fd, req->statdata);
       else
         {
           write (respipe[1], (void *)&req, sizeof (req));
@@ -257,34 +292,19 @@ max_parallel(nthreads)
             cur--;
           }
 
-        poll_cb ();
         while (started > nthreads)
           {
-            sched_yield ();
-            fcntl (respipe[0], F_SETFL, 0);
+            fd_set rfd;
+            FD_ZERO(&rfd);
+            FD_SET(respipe[0], &rfd);
+
+            select (respipe[0] + 1, &rfd, 0, 0, 0);
             poll_cb ();
-            fcntl (respipe[0], F_SETFL, O_NONBLOCK);
           }
 
 void
-aio_read(fh,offset,length,data,dataoffset,callback)
-        InOutStream	fh
-        UV		offset
-        IV		length
-        SV *		data
-        IV		dataoffset
-        SV *		callback
-	PROTOTYPE: $$$$$$
-	ALIAS:
-          aio_write = 1
-	CODE:
-        SvUPGRADE (data, SVt_PV);
-        SvPOK_on (data);
-        read_write (aTHX_ ix, PerlIO_fileno (fh), offset, length, data, dataoffset, callback);
-
-void
 aio_open(pathname,flags,mode,callback)
-	char *	pathname
+	SV *	pathname
         int	flags
         int	mode
         SV *	callback
@@ -292,13 +312,14 @@ aio_open(pathname,flags,mode,callback)
 	CODE:
         aio_req req;
 
-        New (0, req, 1, aio_cb);
+        Newz (0, req, 1, aio_cb);
 
         if (!req)
           croak ("out of memory during aio_req allocation");
 
         req->type = REQ_OPEN;
-        req->dataptr = pathname;
+        req->data = newSVsv (pathname);
+        req->dataptr = SvPV_nolen (req->data);
         req->fd = flags;
         req->mode = mode;
         req->callback = SvREFCNT_inc (callback);
@@ -307,19 +328,79 @@ aio_open(pathname,flags,mode,callback)
 
 void
 aio_close(fh,callback)
-        InOutStream	fh
+        InputStream	fh
         SV *		callback
-	PROTOTYPE: $
+	PROTOTYPE: $$
 	CODE:
         aio_req req;
 
-        New (0, req, 1, aio_cb);
+        Newz (0, req, 1, aio_cb);
 
         if (!req)
           croak ("out of memory during aio_req allocation");
 
         req->type = REQ_CLOSE;
         req->fd = PerlIO_fileno (fh);
+        req->callback = SvREFCNT_inc (callback);
+
+        send_req (req);
+
+void
+aio_read(fh,offset,length,data,dataoffset,callback)
+        InputStream	fh
+        UV		offset
+        IV		length
+        SV *		data
+        IV		dataoffset
+        SV *		callback
+	PROTOTYPE: $$$$$$
+        CODE:
+        read_write (aTHX_ 0, PerlIO_fileno (fh), offset, length, data, dataoffset, callback);
+
+void
+aio_write(fh,offset,length,data,dataoffset,callback)
+        OutputStream	fh
+        UV		offset
+        IV		length
+        SV *		data
+        IV		dataoffset
+        SV *		callback
+	PROTOTYPE: $$$$$$
+        CODE:
+        read_write (aTHX_ 1, PerlIO_fileno (fh), offset, length, data, dataoffset, callback);
+
+void
+aio_stat(fh_or_path,callback)
+        SV *		fh_or_path
+        SV *		callback
+	PROTOTYPE: $$
+        ALIAS:
+           aio_lstat = 1
+	CODE:
+        aio_req req;
+
+        Newz (0, req, 1, aio_cb);
+
+        if (!req)
+          croak ("out of memory during aio_req allocation");
+
+        New (0, req->statdata, 1, struct stat64);
+
+        if (!req->statdata)
+          croak ("out of memory during aio_req->statdata allocation");
+
+        if (SvPOK (fh_or_path))
+          {
+            req->type = ix ? REQ_LSTAT : REQ_STAT;
+            req->data = newSVsv (fh_or_path);
+            req->dataptr = SvPV_nolen (req->data);
+          }
+        else
+          {
+            req->type = REQ_FSTAT;
+            req->fd = PerlIO_fileno (IoIFP (sv_2io (fh_or_path)));
+          }
+
         req->callback = SvREFCNT_inc (callback);
 
         send_req (req);
