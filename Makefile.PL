@@ -4,17 +4,17 @@ use Config;
 
 $Config{ccsymbols} =~ /__i386=1/ or print <<EOF;
 
-WARNING: This module is architecture-dependent and currently only tested on
-         little-endian 32-bit architectures. If the module (esp. aio_read
-         and aio_write) doesn't work, please report this and I'll fix it
-         for you. I promise ;)
+WARNING: This module is architecture-dependent and currently only
+         tested on some architectures. If the module (esp. aio_read and
+         aio_write) doesn't work, please report this and I'll fix it for
+         you. I promise ;)
 
 EOF
 
 $Config{osvers} >= 2.4 or print <<EOF;
 
 WARNING: This module requires 64 bit file offset functionality only found
-         in linux-2.4 and later You might sitll compile this module on older linuxes,
+         in linux-2.4 and later You might still compile this module on older linuxes,
          but it won't run.
 
 DEVELOPERS: It is not difficult to get rid of this limitation, ask me and I'll tell

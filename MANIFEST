@@ -1,4 +1,5 @@
 MANIFEST
+COPYING
 Changes
 Makefile.PL
 AIO.pm
