@@ -13,6 +13,13 @@ typedef void *InputStream; /* hack, but 5.6.1 is simply toooo old ;) */
 typedef void *OutputStream; /* hack, but 5.6.1 is simply toooo old ;) */
 typedef void *InOutStream; /* hack, but 5.6.1 is simply toooo old ;) */
 
+#ifndef __NR_pread64
+# define __NR_pread64 __NR_pread
+#endif
+#ifndef __NR_pwrite64
+# define __NR_pwrite64 __NR_pwrite
+#endif
+
 #define STACKSIZE 1024 /* yeah */
 
 enum { REQ_QUIT, REQ_OPEN, REQ_CLOSE, REQ_READ, REQ_WRITE, REQ_STAT, REQ_LSTAT, REQ_FSTAT};
@@ -213,8 +220,8 @@ aio_proc(void *thr_arg)
   _syscall3(int,open,char *,pathname,int,flags,mode_t,mode)
   _syscall1(int,close,int,fd)
 
-  _syscall5(int,pread,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
-  _syscall5(int,pwrite,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
+  _syscall5(int,pread64,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
+  _syscall5(int,pwrite64,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
 
   _syscall2(int,stat64, const char *, filename, struct stat64 *, buf)
   _syscall2(int,lstat64, const char *, filename, struct stat64 *, buf)
@@ -229,19 +236,19 @@ aio_proc(void *thr_arg)
       errno = 0; /* strictly unnecessary */
 
       if (req->type == REQ_READ)
-        req->result = pread (req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32);
+        req->result = pread64 (req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32);
       else if (req->type == REQ_WRITE)
-        req->result = pwrite(req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32);
+        req->result = pwrite64(req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32);
       else if (req->type == REQ_OPEN)
-        req->result = open (req->dataptr, req->fd, req->mode);
+        req->result = open    (req->dataptr, req->fd, req->mode);
       else if (req->type == REQ_CLOSE)
-        req->result = close (req->fd);
+        req->result = close    (req->fd);
       else if (req->type == REQ_STAT)
-        req->result = stat64 (req->dataptr, req->statdata);
+        req->result = stat64   (req->dataptr, req->statdata);
       else if (req->type == REQ_LSTAT)
-        req->result = lstat64 (req->dataptr, req->statdata);
+        req->result = lstat64  (req->dataptr, req->statdata);
       else if (req->type == REQ_FSTAT)
-        req->result = fstat64 (req->fd, req->statdata);
+        req->result = fstat64  (req->fd, req->statdata);
       else
         {
           write (respipe[1], (void *)&req, sizeof (req));
