@@ -1,5 +1,8 @@
 Revision history for Linux::AIO
 
+1.41 Thu Mar  3 18:00:52 CET 2005
+	- change of contact address.
+
 1.4 Sat Jan 15 01:04:27 CET 2005
         - clarify licensing (same terms as perl itself).
 

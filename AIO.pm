@@ -34,7 +34,7 @@ package Linux::AIO;
 use base 'Exporter';
 
 BEGIN {
-   $VERSION = 1.4;
+   $VERSION = 1.41;
 
    @EXPORT = qw(aio_read aio_write aio_open aio_close aio_stat aio_lstat aio_unlink);
    @EXPORT_OK = qw(poll_fileno poll_cb min_parallel max_parallel nreqs);
@@ -136,7 +136,7 @@ L<Coro>.
 
 =head1 AUTHOR
 
- Marc Lehmann <pcg@goof.com>
+ Marc Lehmann <schmorp@schmorp.de>
  http://home.schmorp.de/
 
 =cut
