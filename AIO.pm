@@ -18,6 +18,9 @@ execute your read/writes and signal their completion. You don't need
 thread support in your libc or perl, and the threads created by this
 module will not be visible to the pthreads library.
 
+Although the module will work with threads, it is not reentrant, so use
+appropriate locking yourself.
+
 =over 4
 
 =cut
@@ -27,7 +30,7 @@ package Linux::AIO;
 use base 'Exporter';
 
 BEGIN {
-   $VERSION = 1.01;
+   $VERSION = 1.1;
 
    @EXPORT = qw(aio_read aio_write aio_open aio_close aio_stat aio_lstat);
    @EXPORT_OK = qw(poll_fileno poll_cb min_parallel max_parallel nreqs);
@@ -38,9 +41,9 @@ BEGIN {
 
 =item Linux::AIO::min_parallel $nthreads
 
-Set the minimum number of AIO threads to C<$nthreads>. You I<have> to call
-this function with a positive number at least once, otherwise no threads
-will be started and you aio-operations will seem to hang.
+Set the minimum number of AIO threads to C<$nthreads>. The default is
+C<1>, which means a single asynchronous operation can be done at one time
+(the number of outstanding operations, however, is unlimited).
 
 It is recommended to keep the number of threads low, as many linux
 kernel versions will scale negatively with the number of threads (higher
@@ -101,6 +104,8 @@ error when stat'ing a large file, the results will be silently truncated
 unless perl itself is compiled with large file support.
 
 =cut
+
+min_parallel 1;
 
 END {
    max_parallel 0;

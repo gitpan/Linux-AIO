@@ -30,7 +30,9 @@ typedef struct {
   char stack[STACKSIZE];
 } aio_thread;
 
-typedef struct {
+typedef struct aio_cb {
+  struct aio_cb *next;
+
   int type;
   aio_thread *thread;
 
@@ -53,10 +55,12 @@ static int started;
 static int nreqs;
 static int reqpipe[2], respipe[2];
 
+static aio_req qs, qe; /* queue start, queue end */
+
 static int aio_proc(void *arg);
 
 static void
-start_thread(void)
+start_thread (void)
 {
   aio_thread *thr;
 
@@ -72,25 +76,44 @@ start_thread(void)
 }
 
 static void
-end_thread(void)
+send_reqs (void)
 {
-  aio_req req;
-  New (0, req, 1, aio_cb);
-  req->type = REQ_QUIT;
-  write (reqpipe[1], &req, sizeof (aio_req));
+  /* this write is atomic */
+  while (qs && write (reqpipe[1], &qs, sizeof qs) == sizeof qs)
+   {
+     qs = qs->next;
+     if (!qs) qe = 0;
+   }
 }
 
 static void
 send_req (aio_req req)
 {
   nreqs++;
-  write (reqpipe[1], &req, sizeof (aio_req));
+  req->next = 0;
+
+  if (qe)
+    qe->next = req;
+  else
+    qe = qs = req;
+
+  send_reqs ();
+}
+
+static void
+end_thread (void)
+{
+  aio_req req;
+  New (0, req, 1, aio_cb);
+  req->type = REQ_QUIT;
+
+  send_req (req);
 }
 
 static void
 read_write (pTHX_
             int dowrite, int fd, off_t offset, size_t length,
-            SV *data, STRLEN dataoffset, SV*callback)
+            SV *data, STRLEN dataoffset, SV *callback)
 {
   aio_req req;
   STRLEN svlen;
@@ -200,6 +223,9 @@ poll_cb (pTHX)
       Safefree (req);
     }
 
+  if (qs)
+    send_reqs ();
+
   return count;
 }
 
@@ -209,7 +235,7 @@ static sigset_t fullsigset;
 #include <asm/unistd.h>
 
 static int
-aio_proc(void *thr_arg)
+aio_proc (void *thr_arg)
 {
   aio_thread *thr = thr_arg;
   aio_req req;
@@ -238,24 +264,20 @@ aio_proc(void *thr_arg)
       req->thread = thr;
       errno = 0; /* strictly unnecessary */
 
-      if (req->type == REQ_READ)
-        req->result = pread64 (req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32);
-      else if (req->type == REQ_WRITE)
-        req->result = pwrite64(req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32);
-      else if (req->type == REQ_OPEN)
-        req->result = open    (req->dataptr, req->fd, req->mode);
-      else if (req->type == REQ_CLOSE)
-        req->result = close    (req->fd);
-      else if (req->type == REQ_STAT)
-        req->result = stat64   (req->dataptr, req->statdata);
-      else if (req->type == REQ_LSTAT)
-        req->result = lstat64  (req->dataptr, req->statdata);
-      else if (req->type == REQ_FSTAT)
-        req->result = fstat64  (req->fd, req->statdata);
-      else
+      switch (req->type)
         {
-          write (respipe[1], (void *)&req, sizeof (req));
-          break;
+          case REQ_READ:  req->result = pread64 (req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32); break;
+          case REQ_WRITE: req->result = pwrite64(req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32); break;
+          case REQ_OPEN:  req->result = open    (req->dataptr, req->fd, req->mode); break;
+          case REQ_CLOSE: req->result = close   (req->fd); break;
+          case REQ_STAT:  req->result = stat64  (req->dataptr, req->statdata); break;
+          case REQ_LSTAT: req->result = lstat64 (req->dataptr, req->statdata); break;
+          case REQ_FSTAT: req->result = fstat64 (req->fd, req->statdata); break;
+
+          case REQ_QUIT:
+          default:
+            write (respipe[1], (void *)&req, sizeof (req));
+            return 0;
         }
 
       req->errorno = errno;
@@ -277,6 +299,9 @@ BOOT:
 
         if (pipe (reqpipe) || pipe (respipe))
           croak ("unable to initialize request or result pipe");
+
+        if (fcntl (reqpipe[1], F_SETFL, O_NONBLOCK))
+          croak ("cannot set result pipe to nonblocking mode");
 
         if (fcntl (respipe[0], F_SETFL, O_NONBLOCK))
           croak ("cannot set result pipe to nonblocking mode");

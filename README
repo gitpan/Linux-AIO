@@ -15,10 +15,13 @@ DESCRIPTION
     thread support in your libc or perl, and the threads created by this
     module will not be visible to the pthreads library.
 
+    Although the module will work with threads, it is not reentrant, so use
+    appropriate locking yourself.
+
     Linux::AIO::min_parallel $nthreads
-        Set the minimum number of AIO threads to $nthreads. You *have* to
-        call this function with a positive number at least once, otherwise
-        no threads will be started and you aio-operations will seem to hang.
+        Set the minimum number of AIO threads to $nthreads. The default is
+        1, which means a single asynchronous operation can be done at one
+        time (the number of outstanding operations, however, is unlimited).
 
         It is recommended to keep the number of threads low, as many linux
         kernel versions will scale negatively with the number of threads
