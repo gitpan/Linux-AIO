@@ -24,7 +24,11 @@ typedef void *InOutStream; /* hack, but 5.6.1 is simply toooo old ;) */
 
 #define STACKSIZE 1024 /* yeah */
 
-enum { REQ_QUIT, REQ_OPEN, REQ_CLOSE, REQ_READ, REQ_WRITE, REQ_STAT, REQ_LSTAT, REQ_FSTAT};
+enum {
+  REQ_QUIT,
+  REQ_OPEN, REQ_CLOSE, REQ_READ, REQ_WRITE,
+  REQ_STAT, REQ_LSTAT, REQ_FSTAT, REQ_UNLINK
+};
 
 typedef struct {
   char stack[STACKSIZE];
@@ -68,7 +72,7 @@ start_thread (void)
 
   if (clone (aio_proc,
              &(thr->stack[STACKSIZE]),
-             CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND,
+             CLONE_VM|CLONE_FS|CLONE_FILES,
              thr) >= 0)
     started++;
   else
@@ -233,6 +237,7 @@ static sigset_t fullsigset;
 
 #undef errno
 #include <asm/unistd.h>
+#include <sys/prctl.h>
 
 static int
 aio_proc (void *thr_arg)
@@ -256,7 +261,10 @@ aio_proc (void *thr_arg)
   _syscall2(int,lstat64, const char *, filename, struct stat64 *, buf)
   _syscall2(int,fstat64, int, fd, struct stat64 *, buf)
 
+  _syscall1(int,unlink, char *, filename);
+
   sigprocmask (SIG_SETMASK, &fullsigset, 0);
+  prctl (PR_SET_PDEATHSIG, SIGKILL);
 
   /* then loop */
   while (read (reqpipe[0], (void *)&req, sizeof (req)) == sizeof (req))
@@ -266,13 +274,14 @@ aio_proc (void *thr_arg)
 
       switch (req->type)
         {
-          case REQ_READ:  req->result = pread64 (req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32); break;
-          case REQ_WRITE: req->result = pwrite64(req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32); break;
-          case REQ_OPEN:  req->result = open    (req->dataptr, req->fd, req->mode); break;
-          case REQ_CLOSE: req->result = close   (req->fd); break;
-          case REQ_STAT:  req->result = stat64  (req->dataptr, req->statdata); break;
-          case REQ_LSTAT: req->result = lstat64 (req->dataptr, req->statdata); break;
-          case REQ_FSTAT: req->result = fstat64 (req->fd, req->statdata); break;
+          case REQ_READ:   req->result = pread64 (req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32); break;
+          case REQ_WRITE:  req->result = pwrite64(req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32); break;
+          case REQ_OPEN:   req->result = open    (req->dataptr, req->fd, req->mode); break;
+          case REQ_CLOSE:  req->result = close   (req->fd); break;
+          case REQ_STAT:   req->result = stat64  (req->dataptr, req->statdata); break;
+          case REQ_LSTAT:  req->result = lstat64 (req->dataptr, req->statdata); break;
+          case REQ_FSTAT:  req->result = fstat64 (req->fd, req->statdata); break;
+          case REQ_UNLINK: req->result = unlink  (req->dataptr); break;
 
           case REQ_QUIT:
           default:
@@ -439,6 +448,26 @@ aio_stat(fh_or_path,callback)
         req->callback = SvREFCNT_inc (callback);
 
         send_req (req);
+
+void
+aio_unlink(pathname,callback)
+	SV * pathname
+	SV * callback
+	PROTOTYPE: $$
+	CODE:
+	aio_req req;
+	
+	Newz (0, req, 1, aio_cb);
+	
+	if (!req)
+	  croak ("out of memory during aio_req allocation");
+	
+	req->type = REQ_UNLINK;
+	req->data = newSVsv (pathname);
+	req->dataptr = SvPV_nolen (req->data);
+	req->callback = SvREFCNT_inc (callback);
+	
+	send_req (req);
 
 int
 poll_fileno()

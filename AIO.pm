@@ -18,6 +18,10 @@ execute your read/writes and signal their completion. You don't need
 thread support in your libc or perl, and the threads created by this
 module will not be visible to the pthreads library.
 
+NOTICE: the threads created by this module will automatically be killed
+when the thread calling min_parallel exits. Make sure you only ever call
+min_parallel from the same thread that loaded this module.
+
 Although the module will work with threads, it is not reentrant, so use
 appropriate locking yourself.
 
@@ -30,9 +34,9 @@ package Linux::AIO;
 use base 'Exporter';
 
 BEGIN {
-   $VERSION = 1.1;
+   $VERSION = 1.2;
 
-   @EXPORT = qw(aio_read aio_write aio_open aio_close aio_stat aio_lstat);
+   @EXPORT = qw(aio_read aio_write aio_open aio_close aio_stat aio_lstat aio_unlink);
    @EXPORT_OK = qw(poll_fileno poll_cb min_parallel max_parallel nreqs);
 
    require XSLoader;
@@ -102,6 +106,10 @@ or C<-s _> etc...
 Currently, the stats are always 64-bit-stats, i.e. instead of returning an
 error when stat'ing a large file, the results will be silently truncated
 unless perl itself is compiled with large file support.
+
+=item aio_unlink  $pathname, $callback
+
+Asynchronously unlink a file
 
 =cut
 

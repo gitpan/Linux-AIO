@@ -15,6 +15,10 @@ DESCRIPTION
     thread support in your libc or perl, and the threads created by this
     module will not be visible to the pthreads library.
 
+    NOTICE: the threads created by this module will automatically be killed
+    when the thread calling min_parallel exits. Make sure you only ever call
+    min_parallel from the same thread that loaded this module.
+
     Although the module will work with threads, it is not reentrant, so use
     appropriate locking yourself.
 
@@ -73,6 +77,9 @@ DESCRIPTION
         returning an error when stat'ing a large file, the results will be
         silently truncated unless perl itself is compiled with large file
         support.
+
+    aio_unlink $pathname, $callback
+        Asynchronously unlink a file
 
 BUGS
     This module has been extensively tested in a large and very busy

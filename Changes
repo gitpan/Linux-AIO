@@ -1,5 +1,10 @@
 Revision history for Linux::AIO
 
+1.2 Sun Jul 18 12:54:43 CEST 2004
+	- do not clone signal handlers.
+        - when the parent thread dies, kill the child threads.
+        - added aio_unlink support (Brad Fitzpatrick <brad@danga.com>)
+
 1.1 Fri May  7 02:57:36 CEST 2004
 	- the number of outstanding requests was limited by the
           pipe buffer size. this limit has been removed.
