@@ -5,13 +5,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sched.h>
 
-#define STACKSIZE 2048 /* yeah */
+#define STACKSIZE 1024 /* yeah */
 
-#define REQ_QUIT  0
-#define REQ_READ  1
-#define REQ_WRITE 2
+enum { REQ_QUIT, REQ_READ, REQ_WRITE, REQ_OPEN, REQ_CLOSE };
 
 typedef struct {
   char stack[STACKSIZE];
@@ -26,8 +25,8 @@ typedef struct {
   off_t offset;
   size_t length;
   ssize_t result;
+  mode_t mode; /* open */
   int errorno;
-
   SV *data, *callback;
   void *dataptr;
   STRLEN dataoffset;
@@ -63,6 +62,13 @@ end_thread(void)
   aio_req req;
   New (0, req, 1, aio_cb);
   req->type = REQ_QUIT;
+  write (reqpipe[1], &req, sizeof (aio_req));
+}
+
+static void
+send_req (aio_req req)
+{
+  nreqs++;
   write (reqpipe[1], &req, sizeof (aio_req));
 }
 
@@ -108,8 +114,7 @@ read_write (pTHX_ int dowrite, int fd, off_t offset, size_t length,
   req->dataptr = (char *)svptr + dataoffset;
   req->callback = SvREFCNT_inc (callback);
 
-  nreqs++;
-  write (reqpipe[1], &req, sizeof (aio_req));
+  send_req (req);
 }
 
 static int
@@ -155,6 +160,8 @@ poll_cb (pTHX)
   return count;
 }
 
+static sigset_t fullsigset;
+
 #undef errno
 #include <asm/unistd.h>
 
@@ -162,30 +169,26 @@ static int
 aio_proc(void *thr_arg)
 {
   aio_thread *thr = thr_arg;
-  int sig;
-  int errno;
   aio_req req;
+  int errno;
 
   /* we rely on gcc's ability to create closures. */
-  _syscall3(int,lseek,int,fd,off_t,offset,int,whence);
-  _syscall3(int,read,int,fd,char *,buf,off_t,count);
-  _syscall3(int,write,int,fd,char *,buf,off_t,count);
+  _syscall3(int,lseek,int,fd,off_t,offset,int,whence)
+  _syscall3(int,read,int,fd,char *,buf,off_t,count)
+  _syscall3(int,write,int,fd,char *,buf,off_t,count)
+  _syscall3(int,open,char *,pathname,int,flags,mode_t,mode)
+  _syscall1(int,close,int,fd)
 
-  /* first get rid of any signals */
-  for (sig = 1; sig < _NSIG; sig++)
-    signal (sig, SIG_DFL);
+  sigprocmask (SIG_SETMASK, &fullsigset, 0);
 
-  signal (SIGPIPE, SIG_IGN);
- 
   /* then loop */
   while (read (reqpipe[0], (void *)&req, sizeof (req)) == sizeof (req))
     {
       req->thread = thr;
+      errno = 0;
 
       if (req->type == REQ_READ || req->type == REQ_WRITE)
         {
-          errno = 0;
-
           if (lseek (req->fd, req->offset, SEEK_SET) == req->offset)
             {
               if (req->type == REQ_READ)
@@ -193,8 +196,14 @@ aio_proc(void *thr_arg)
               else
                 req->result = write(req->fd, req->dataptr, req->length);
             }
-
-          req->errorno = errno;
+        }
+      else if (req->type == REQ_OPEN)
+        {
+          req->result = open (req->dataptr, req->fd, req->mode);
+        }
+      else if (req->type == REQ_CLOSE)
+        {
+          req->result = close (req->fd);
         }
       else
         {
@@ -202,6 +211,7 @@ aio_proc(void *thr_arg)
           break;
         }
 
+      req->errorno = errno;
       write (respipe[1], (void *)&req, sizeof (req));
     }
 
@@ -212,6 +222,12 @@ MODULE = Linux::AIO                PACKAGE = Linux::AIO
 
 BOOT:
 {
+        sigfillset (&fullsigset);
+        sigdelset (&fullsigset, SIGTERM);
+        sigdelset (&fullsigset, SIGQUIT);
+        sigdelset (&fullsigset, SIGABRT);
+        sigdelset (&fullsigset, SIGINT);
+
         if (pipe (reqpipe) || pipe (respipe))
           croak ("unable to initialize request or result pipe");
 
@@ -261,6 +277,48 @@ aio_read(fh,offset,length,data,dataoffset,callback)
         SvUPGRADE (data, SVt_PV);
         SvPOK_on (data);
         read_write (aTHX_ ix, PerlIO_fileno (fh), offset, length, data, dataoffset, callback);
+
+void
+aio_open(pathname,flags,mode,callback)
+	char *	pathname
+        int	flags
+        int	mode
+        SV *	callback
+	PROTOTYPE: $$$$
+	CODE:
+        aio_req req;
+
+        New (0, req, 1, aio_cb);
+
+        if (!req)
+          croak ("out of memory during aio_req allocation");
+
+        req->type = REQ_OPEN;
+        req->dataptr = pathname;
+        req->fd = flags;
+        req->mode = mode;
+        req->callback = SvREFCNT_inc (callback);
+
+        send_req (req);
+
+void
+aio_close(fh,callback)
+        PerlIO *	fh
+        SV *		callback
+	PROTOTYPE: $
+	CODE:
+        aio_req req;
+
+        New (0, req, 1, aio_cb);
+
+        if (!req)
+          croak ("out of memory during aio_req allocation");
+
+        req->type = REQ_CLOSE;
+        req->fd = PerlIO_fileno (fh);
+        req->callback = SvREFCNT_inc (callback);
+
+        send_req (req);
 
 int
 poll_fileno()

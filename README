@@ -16,13 +16,6 @@ DESCRIPTION
         call this function with a positive number at leats once, otherwise
         no threads will be started and you aio-operations will seem to hang.
 
-    aio_read($fh,$offset,$length, $data,$dataoffset,$callback)
-    aio_write($fh,$offset,$length, $data,$dataoffset,$callback)
-        Reads or writes "length" bytes from the specified "fh" and "offset"
-        into the scalar given by "data" and offset "dataoffset" and calls
-        the callback without the actual number of bytes read (or undef on
-        error).
-
     $fileno = Linux::AIO::poll_fileno
         Return the request result pipe filehandle. This filehandle must be
         polled for reading. If the pipe becomes readable you have to call
@@ -41,8 +34,25 @@ DESCRIPTION
     Linux::AIO::nreqs
         Returns the number of requests currently outstanding.
 
+    aio_read($fh,$offset,$length, $data,$dataoffset,$callback)
+    aio_write($fh,$offset,$length, $data,$dataoffset,$callback)
+        Reads or writes "length" bytes from the specified "fh" and "offset"
+        into the scalar given by "data" and offset "dataoffset" and calls
+        the callback without the actual number of bytes read (or undef on
+        error).
+
+    aio_open($pathname, $flags, $mode, $callback)
+        Asynchronously open or create a file and call the callback with the
+        filedescriptor.
+
+    aio_close($fh, $callback)
+        Asynchronously close a file and call the callback with the result
+        code.
+
 BUGS
     This module has not yet been extensively tested. Watch out!
+
+       - aio_stat/lstat are seriously missing here.
 
 SEE ALSO
     the Coro manpage.

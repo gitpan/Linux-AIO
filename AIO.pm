@@ -23,9 +23,9 @@ package Linux::AIO;
 use base 'Exporter';
 
 BEGIN {
-   $VERSION = 0.001;
+   $VERSION = 0.01;
 
-   @EXPORT = qw(aio_read aio_write);
+   @EXPORT = qw(aio_read aio_write aio_open aio_close);
    @EXPORT_OK = qw(poll_fileno poll_cb min_parallel max_parallel nreqs);
 
    require XSLoader;
@@ -37,15 +37,6 @@ BEGIN {
 Set the minimum number of AIO threads to $nthreads. You I<have> to call
 this function with a positive number at leats once, otherwise no threads
 will be started and you aio-operations will seem to hang.
-
-=cut
-
-=item aio_read($fh,$offset,$length, $data,$dataoffset,$callback)
-aio_write($fh,$offset,$length, $data,$dataoffset,$callback)
-
-Reads or writes C<length> bytes from the specified C<fh> and C<offset>
-into the scalar given by C<data> and offset C<dataoffset> and calls the
-callback without the actual number of bytes read (or undef on error).
 
 =item $fileno = Linux::AIO::poll_fileno
 
@@ -68,6 +59,22 @@ You can use Event to multiplex, e.g.:
 
 Returns the number of requests currently outstanding.
 
+=item aio_read($fh,$offset,$length, $data,$dataoffset,$callback)
+aio_write($fh,$offset,$length, $data,$dataoffset,$callback)
+
+Reads or writes C<length> bytes from the specified C<fh> and C<offset>
+into the scalar given by C<data> and offset C<dataoffset> and calls the
+callback without the actual number of bytes read (or undef on error).
+
+=item aio_open($pathname, $flags, $mode, $callback)
+
+Asynchronously open or create a file and call the callback with the
+filedescriptor.
+
+=item aio_close($fh, $callback)
+
+Asynchronously close a file and call the callback with the result code.
+
 =cut
 
 END {
@@ -81,6 +88,8 @@ END {
 =head1 BUGS
 
 This module has not yet been extensively tested. Watch out!
+
+   - aio_stat/lstat are seriously missing here.
 
 =head1 SEE ALSO
 

@@ -1,0 +1,10 @@
+Revision history for Linux::AIO
+
+0.01  Mon Oct  8 14:57:59 CEST 2001
+	- fixed syntax errors so it compiles with gcc-2.95.4 as well.
+
+0.002
+	- added Changes, aio_open, aio_close.
+
+0.001
+	- original version, a dire hack.

@@ -1,4 +1,5 @@
 MANIFEST
+Changes
 Makefile.PL
 AIO.pm
 AIO.xs
