@@ -1,3 +1,5 @@
+#define PERL_NO_GET_CONTEXT
+
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
@@ -86,7 +88,8 @@ send_req (aio_req req)
 }
 
 static void
-read_write (pTHX_ int dowrite, int fd, off_t offset, size_t length,
+read_write (pTHX_
+            int dowrite, int fd, off_t offset, size_t length,
             SV *data, STRLEN dataoffset, SV*callback)
 {
   aio_req req;
@@ -306,7 +309,7 @@ max_parallel(nthreads)
             FD_SET(respipe[0], &rfd);
 
             select (respipe[0] + 1, &rfd, 0, 0, 0);
-            poll_cb ();
+            poll_cb (aTHX);
           }
 
 void
