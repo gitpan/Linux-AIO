@@ -55,7 +55,7 @@ BUGS
        - aio_stat/lstat are seriously missing here.
 
 SEE ALSO
-    the Coro manpage.
+    Coro.
 
 AUTHOR
      Marc Lehmann <pcg@goof.com>

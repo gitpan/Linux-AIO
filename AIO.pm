@@ -23,7 +23,7 @@ package Linux::AIO;
 use base 'Exporter';
 
 BEGIN {
-   $VERSION = 0.01;
+   $VERSION = 0.011;
 
    @EXPORT = qw(aio_read aio_write aio_open aio_close);
    @EXPORT_OK = qw(poll_fileno poll_cb min_parallel max_parallel nreqs);

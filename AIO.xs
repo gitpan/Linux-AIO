@@ -8,6 +8,8 @@
 #include <signal.h>
 #include <sched.h>
 
+typedef void *InOutStream; /* hack, but 5.6.1 is simply toooo old ;) */
+
 #define STACKSIZE 1024 /* yeah */
 
 enum { REQ_QUIT, REQ_READ, REQ_WRITE, REQ_OPEN, REQ_CLOSE };
@@ -259,16 +261,18 @@ max_parallel(nthreads)
         while (started > nthreads)
           {
             sched_yield ();
+            fcntl (respipe[0], F_SETFL, 0);
             poll_cb ();
+            fcntl (respipe[0], F_SETFL, O_NONBLOCK);
           }
 
 void
 aio_read(fh,offset,length,data,dataoffset,callback)
-        PerlIO *	fh
+        InOutStream	fh
         UV		offset
-        STRLEN		length
+        IV		length
         SV *		data
-        STRLEN		dataoffset
+        IV		dataoffset
         SV *		callback
 	PROTOTYPE: $$$$$$
 	ALIAS:
@@ -303,7 +307,7 @@ aio_open(pathname,flags,mode,callback)
 
 void
 aio_close(fh,callback)
-        PerlIO *	fh
+        InOutStream	fh
         SV *		callback
 	PROTOTYPE: $
 	CODE:
