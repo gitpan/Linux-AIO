@@ -1,5 +1,8 @@
 Revision history for Linux::AIO
 
+1.0  Wed May  5 15:54:23 CEST 2004
+	- improved the documentation and made a 1.0 release. Whoopa!
+
 0.2  Wed May  5 12:13:02 CEST 2004
 	- updates for 2.6 headers (syscalls were renamed).
 
