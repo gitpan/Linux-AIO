@@ -11,16 +11,9 @@
 #include <signal.h>
 #include <sched.h>
 
-typedef void *InputStream; /* hack, but 5.6.1 is simply toooo old ;) */
+typedef void *InputStream;  /* hack, but 5.6.1 is simply toooo old ;) */
 typedef void *OutputStream; /* hack, but 5.6.1 is simply toooo old ;) */
-typedef void *InOutStream; /* hack, but 5.6.1 is simply toooo old ;) */
-
-#ifndef __NR_pread64
-# define __NR_pread64 __NR_pread
-#endif
-#ifndef __NR_pwrite64
-# define __NR_pwrite64 __NR_pwrite
-#endif
+typedef void *InOutStream;  /* hack, but 5.6.1 is simply toooo old ;) */
 
 #define STACKSIZE 1024 /* yeah */
 
@@ -50,7 +43,7 @@ typedef struct aio_cb {
   void *dataptr;
   STRLEN dataoffset;
 
-  struct stat64 *statdata;
+  Stat_t *statdata;
 } aio_cb;
 
 typedef aio_cb *aio_req;
@@ -191,21 +184,9 @@ poll_cb (pTHX)
 
           if (req->type == REQ_STAT || req->type == REQ_LSTAT || req->type == REQ_FSTAT)
             {
-              PL_laststype            = req->type == REQ_LSTAT ? OP_LSTAT : OP_STAT;
-              PL_laststatval          = req->result;
-              PL_statcache.st_dev     = req->statdata->st_dev;
-              PL_statcache.st_ino     = req->statdata->st_ino;
-              PL_statcache.st_mode    = req->statdata->st_mode;
-              PL_statcache.st_nlink   = req->statdata->st_nlink;
-              PL_statcache.st_uid     = req->statdata->st_uid;
-              PL_statcache.st_gid     = req->statdata->st_gid;
-              PL_statcache.st_rdev    = req->statdata->st_rdev;
-              PL_statcache.st_size    = req->statdata->st_size;
-              PL_statcache.st_atime   = req->statdata->st_atime;
-              PL_statcache.st_mtime   = req->statdata->st_mtime;
-              PL_statcache.st_ctime   = req->statdata->st_ctime;
-              PL_statcache.st_blksize = req->statdata->st_blksize;
-              PL_statcache.st_blocks  = req->statdata->st_blocks;
+              PL_laststype   = req->type == REQ_LSTAT ? OP_LSTAT : OP_STAT;
+              PL_laststatval = req->result;
+              PL_statcache   = *(req->statdata);
 
               Safefree (req->statdata);
             }
@@ -239,6 +220,21 @@ static sigset_t fullsigset;
 #include <asm/unistd.h>
 #include <sys/prctl.h>
 
+#define COPY_STATDATA	\
+  req->statdata->st_dev     = statdata.st_dev;		\
+  req->statdata->st_ino     = statdata.st_ino;		\
+  req->statdata->st_mode    = statdata.st_mode;		\
+  req->statdata->st_nlink   = statdata.st_nlink;	\
+  req->statdata->st_uid     = statdata.st_uid;		\
+  req->statdata->st_gid     = statdata.st_gid;		\
+  req->statdata->st_rdev    = statdata.st_rdev;		\
+  req->statdata->st_size    = statdata.st_size;		\
+  req->statdata->st_atime   = statdata.st_atime;	\
+  req->statdata->st_mtime   = statdata.st_mtime;	\
+  req->statdata->st_ctime   = statdata.st_ctime;	\
+  req->statdata->st_blksize = statdata.st_blksize;	\
+  req->statdata->st_blocks  = statdata.st_blocks;	\
+
 static int
 aio_proc (void *thr_arg)
 {
@@ -246,7 +242,7 @@ aio_proc (void *thr_arg)
   aio_req req;
   int errno;
 
-  /* this is very much x86 and kernel-specific :(:(:( */
+  /* this is very much kernel-specific :(:(:( */
   /* we rely on gcc's ability to create closures. */
   _syscall3(int,read,int,fd,char *,buf,size_t,count)
   _syscall3(int,write,int,fd,char *,buf,size_t,count)
@@ -254,12 +250,28 @@ aio_proc (void *thr_arg)
   _syscall3(int,open,char *,pathname,int,flags,mode_t,mode)
   _syscall1(int,close,int,fd)
 
+#ifdef __NR_pread64
   _syscall5(int,pread64,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
   _syscall5(int,pwrite64,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
+#elif __NR_pread
+  _syscall4(int,pread,int,fd,char *,buf,size_t,count,offset_t,offset)
+  _syscall4(int,pwrite,int,fd,char *,buf,size_t,count,offset_t,offset)
+#else
+# error "neither pread nor pread64 defined"
+#endif
 
+
+#ifdef __NR_stat64
   _syscall2(int,stat64, const char *, filename, struct stat64 *, buf)
   _syscall2(int,lstat64, const char *, filename, struct stat64 *, buf)
   _syscall2(int,fstat64, int, fd, struct stat64 *, buf)
+#elif __NR_stat
+  _syscall2(int,stat, const char *, filename, struct stat *, buf)
+  _syscall2(int,lstat, const char *, filename, struct stat *, buf)
+  _syscall2(int,fstat, int, fd, struct stat *, buf)
+#else
+# error "neither stat64 nor stat defined"
+#endif
 
   _syscall1(int,unlink, char *, filename);
 
@@ -274,13 +286,26 @@ aio_proc (void *thr_arg)
 
       switch (req->type)
         {
+#ifdef __NR_pread64
           case REQ_READ:   req->result = pread64 (req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32); break;
           case REQ_WRITE:  req->result = pwrite64(req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32); break;
+#else
+          case REQ_READ:   req->result = pread   (req->fd, req->dataptr, req->length, req->offset); break;
+          case REQ_WRITE:  req->result = pwrite  (req->fd, req->dataptr, req->length, req->offset); break;
+#endif
+#ifdef __NR_stat64
+          struct stat64 statdata;
+          case REQ_STAT:   req->result = stat64  (req->dataptr, &statdata); COPY_STATDATA; break;
+          case REQ_LSTAT:  req->result = lstat64 (req->dataptr, &statdata); COPY_STATDATA; break;
+          case REQ_FSTAT:  req->result = fstat64 (req->fd, &statdata);      COPY_STATDATA; break;
+#else
+          struct stat statdata;
+          case REQ_STAT:   req->result = stat    (req->dataptr, &statdata); COPY_STATDATA; break;
+          case REQ_LSTAT:  req->result = lstat   (req->dataptr, &statdata); COPY_STATDATA; break;
+          case REQ_FSTAT:  req->result = fstat   (req->fd, &statdata);      COPY_STATDATA; break;
+#endif
           case REQ_OPEN:   req->result = open    (req->dataptr, req->fd, req->mode); break;
           case REQ_CLOSE:  req->result = close   (req->fd); break;
-          case REQ_STAT:   req->result = stat64  (req->dataptr, req->statdata); break;
-          case REQ_LSTAT:  req->result = lstat64 (req->dataptr, req->statdata); break;
-          case REQ_FSTAT:  req->result = fstat64 (req->fd, req->statdata); break;
           case REQ_UNLINK: req->result = unlink  (req->dataptr); break;
 
           case REQ_QUIT:
@@ -428,7 +453,7 @@ aio_stat(fh_or_path,callback)
         if (!req)
           croak ("out of memory during aio_req allocation");
 
-        New (0, req->statdata, 1, struct stat64);
+        New (0, req->statdata, 1, Stat_t);
 
         if (!req->statdata)
           croak ("out of memory during aio_req->statdata allocation");

@@ -43,9 +43,14 @@ EOF
 }
 
 # now get rid of -fpic, because gcc can't use syscall'ed closures
-# from within pic code.
-for ($mm->{CCDLFLAGS}, $mm->{CCCDLFLAGS}, @{$mm->{RESULT}}) {
-   s/\B-f(pic|PIC)\b//g
+# from within pic code on x86.
+
+use Config;
+
+if ($Config{archname} =~ /i[x34567]86/) {
+   for ($mm->{CCDLFLAGS}, $mm->{CCCDLFLAGS}, @{$mm->{RESULT}}) {
+      s/\B-f(pic|PIC)\b//g
+   }
 }
 
 $mm->flush;

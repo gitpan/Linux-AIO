@@ -79,7 +79,7 @@ DESCRIPTION
         support.
 
     aio_unlink $pathname, $callback
-        Asynchronously unlink a file
+        Asynchronously unlink a file.
 
 BUGS
     This module has been extensively tested in a large and very busy

@@ -34,7 +34,7 @@ package Linux::AIO;
 use base 'Exporter';
 
 BEGIN {
-   $VERSION = 1.2;
+   $VERSION = 1.3;
 
    @EXPORT = qw(aio_read aio_write aio_open aio_close aio_stat aio_lstat aio_unlink);
    @EXPORT_OK = qw(poll_fileno poll_cb min_parallel max_parallel nreqs);
@@ -109,7 +109,7 @@ unless perl itself is compiled with large file support.
 
 =item aio_unlink  $pathname, $callback
 
-Asynchronously unlink a file
+Asynchronously unlink a file.
 
 =cut
 
