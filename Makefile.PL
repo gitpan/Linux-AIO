@@ -11,6 +11,17 @@ WARNING: This module is architecture-dependent and currently only works on
 
 EOF
 
+$Config{osvers} >= 2.4 or print <<EOF;
+
+WARNING: This module requires 64 bit file offste functionality only found
+         in linux-2.4. You might sitll compile this module on older linuxes,
+         but it won't run.
+
+DEVELOPERS: It is not difficult to get rid of this limitation, ask me and I'll tell
+            you what you need to change (and test, so I can add it!).
+
+EOF
+
 my $mm = MM->new({
     dist         => {
        PREOP	=> 'pod2text AIO.pm | tee README >$(DISTVNAME)/README; chmod -R u=rwX,go=rX . ;',

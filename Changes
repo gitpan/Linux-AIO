@@ -1,5 +1,8 @@
 Revision history for Linux::AIO
 
+0.111 Sat May 18 23:47:12 CEST 2002
+	- print a notice that this module won't run on lnux <2.4.
+
 0.11 Fri May 17 04:33:23 CEST 2002
 	- actually fix the module to work on x86 (doesn't work on
           most other architectures, though).
