@@ -266,7 +266,7 @@ aio_proc (void *thr_arg)
 
 #define arch64 (__ia64 || __alpha)
 
-#ifdef __NR_pread64 && !arch64
+#if __NR_pread64 && !arch64
   _syscall5(int,pread64,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
   _syscall5(int,pwrite64,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
 #elif __NR_pread
@@ -277,7 +277,7 @@ aio_proc (void *thr_arg)
 #endif
 
 
-#ifdef __NR_stat64 && !arch64
+#if __NR_stat64 && !arch64
   _syscall2(int,stat64, const char *, filename, struct stat64 *, buf)
   _syscall2(int,lstat64, const char *, filename, struct stat64 *, buf)
   _syscall2(int,fstat64, int, fd, struct stat64 *, buf)
