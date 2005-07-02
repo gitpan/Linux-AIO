@@ -2,7 +2,7 @@ use ExtUtils::MakeMaker;
 
 use Config;
 
-$Config{ccsymbols} =~ /__i386=1/ or print <<EOF;
+$Config{cppsymbols} =~ /__i386=1/ or print <<EOF;
 
 WARNING: This module is architecture-dependent and currently only
          tested on some architectures. If the module (esp. aio_read and
@@ -47,7 +47,7 @@ EOF
 
 use Config;
 
-if ($Config{archname} =~ /i[x34567]86/) {
+if ($Config{cppsymbols} =~ /__i386=1/) {
    for ($mm->{CCDLFLAGS}, $mm->{CCCDLFLAGS}, @{$mm->{RESULT}}) {
       s/\B-f(pic|PIC)\b//g
    }

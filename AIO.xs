@@ -15,7 +15,7 @@ typedef void *InputStream;  /* hack, but 5.6.1 is simply toooo old ;) */
 typedef void *OutputStream; /* hack, but 5.6.1 is simply toooo old ;) */
 typedef void *InOutStream;  /* hack, but 5.6.1 is simply toooo old ;) */
 
-#define STACKSIZE 1024 /* yeah */
+#define STACKSIZE (128 * sizeof (long)) /* yeah */
 
 enum {
   REQ_QUIT,
@@ -64,7 +64,7 @@ start_thread (void)
   New (0, thr, 1, aio_thread);
 
   if (clone (aio_proc,
-             &(thr->stack[STACKSIZE]),
+             &(thr->stack[STACKSIZE - sizeof (long)]),
              CLONE_VM|CLONE_FS|CLONE_FILES,
              thr) >= 0)
     started++;
@@ -90,7 +90,10 @@ send_req (aio_req req)
   req->next = 0;
 
   if (qe)
-    qe->next = req;
+    {
+      qe->next = req;
+      qe = req;
+    }
   else
     qe = qs = req;
 
@@ -156,6 +159,16 @@ read_write (pTHX_
   send_req (req);
 }
 
+static void
+poll_wait ()
+{
+  fd_set rfd;
+  FD_ZERO(&rfd);
+  FD_SET(respipe[0], &rfd);
+
+  select (respipe[0] + 1, &rfd, 0, 0, 0);
+}
+
 static int
 poll_cb (pTHX)
 {
@@ -165,6 +178,8 @@ poll_cb (pTHX)
 
   while (read (respipe[0], (void *)&req, sizeof (req)) == sizeof (req))
     {
+      nreqs--;
+
       if (req->type == REQ_QUIT)
         {
           Safefree (req->thread);
@@ -201,7 +216,6 @@ poll_cb (pTHX)
             SvREFCNT_dec (req->callback);
 
           errno = errorno;
-          nreqs--;
           count++;
         }
 
@@ -250,7 +264,9 @@ aio_proc (void *thr_arg)
   _syscall3(int,open,char *,pathname,int,flags,mode_t,mode)
   _syscall1(int,close,int,fd)
 
-#ifdef __NR_pread64
+#define arch64 (__ia64 || __alpha)
+
+#ifdef __NR_pread64 && !arch64
   _syscall5(int,pread64,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
   _syscall5(int,pwrite64,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
 #elif __NR_pread
@@ -261,7 +277,7 @@ aio_proc (void *thr_arg)
 #endif
 
 
-#ifdef __NR_stat64
+#ifdef __NR_stat64 && !arch64
   _syscall2(int,stat64, const char *, filename, struct stat64 *, buf)
   _syscall2(int,lstat64, const char *, filename, struct stat64 *, buf)
   _syscall2(int,fstat64, int, fd, struct stat64 *, buf)
@@ -363,11 +379,7 @@ max_parallel(nthreads)
 
         while (started > nthreads)
           {
-            fd_set rfd;
-            FD_ZERO(&rfd);
-            FD_SET(respipe[0], &rfd);
-
-            select (respipe[0] + 1, &rfd, 0, 0, 0);
+            poll_wait ();
             poll_cb (aTHX);
           }
 
@@ -509,6 +521,12 @@ poll_cb(...)
         RETVAL = poll_cb (aTHX);
 	OUTPUT:
 	RETVAL
+
+void
+poll_wait()
+	PROTOTYPE:
+	CODE:
+        poll_wait ();
 
 int
 nreqs()

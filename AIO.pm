@@ -34,7 +34,7 @@ package Linux::AIO;
 use base 'Exporter';
 
 BEGIN {
-   $VERSION = 1.41;
+   $VERSION = 1.5;
 
    @EXPORT = qw(aio_read aio_write aio_open aio_close aio_stat aio_lstat aio_unlink);
    @EXPORT_OK = qw(poll_fileno poll_cb min_parallel max_parallel nreqs);
@@ -49,9 +49,18 @@ Set the minimum number of AIO threads to C<$nthreads>. The default is
 C<1>, which means a single asynchronous operation can be done at one time
 (the number of outstanding operations, however, is unlimited).
 
-It is recommended to keep the number of threads low, as many linux
+It is recommended to keep the number of threads low, as some linux
 kernel versions will scale negatively with the number of threads (higher
 parallelity => MUCH higher latency).
+
+=item Linux::AIO::max_parallel $nthreads
+
+Sets the maximum number of AIO threads to C<$nthreads>. If more than
+the specified number of threads are currently running, kill them. This
+function blocks until the limit is reached.
+
+This module automatically runs C<max_parallel 0> at program end, to ensure
+that all threads are killed and that there are no outstanding requests.
 
 =item $fileno = Linux::AIO::poll_fileno
 
@@ -72,6 +81,11 @@ You can use Event to multiplex, e.g.:
               poll => 'r', async => 1,
               cb => \&Linux::AIO::poll_cb );
 
+=item Linux::AIO::poll_wait
+
+Wait till the result filehandle becomes ready for reading (simply does a
+select on the filehandle. This is useful if you want to synchronously wait
+for some requests to finish).
 
 =item Linux::AIO::nreqs
 

@@ -1,5 +1,16 @@
 Revision history for Linux::AIO
 
+1.5 Sat Jul  2 15:16:16 CEST 2005
+	- works on: ia32, amd64.
+        - likely works on: powerpc, mips, s390, sparc, m68k, mips, arm.
+        - maybe works on: alpha, ia64.
+        - unlikely to work on: hppa.
+	- killing threads increases nreqs count infinitely.
+        - fixed a bug in queueing => many outstanding
+          requests lead to starvation.
+        - new function Linux::AIO::poll_wait.
+        - documented Linux::AIO::max_parallel.
+
 1.41 Thu Mar  3 18:00:52 CET 2005
 	- change of contact address.
 
