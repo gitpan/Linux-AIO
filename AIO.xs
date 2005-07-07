@@ -10,12 +10,14 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sched.h>
+#include <endian.h>
 
 typedef void *InputStream;  /* hack, but 5.6.1 is simply toooo old ;) */
 typedef void *OutputStream; /* hack, but 5.6.1 is simply toooo old ;) */
 typedef void *InOutStream;  /* hack, but 5.6.1 is simply toooo old ;) */
 
-#define STACKSIZE (128 * sizeof (long)) /* yeah */
+// 128 seems to be enough most everywhere. alpha needs 256.
+#define STACKSIZE (256 * sizeof (long))
 
 enum {
   REQ_QUIT,
@@ -234,6 +236,23 @@ static sigset_t fullsigset;
 #include <asm/unistd.h>
 #include <sys/prctl.h>
 
+#if BYTE_ORDER == LITTLE_ENDIAN
+# define LONG_LONG_PAIR(HI, LO) LO, HI
+#elif BYTE_ORDER == BIG_ENDIAN
+# define LONG_LONG_PAIR(HI, LO) HI, LO
+#endif
+
+#if __alpha || __ia64 || __hppa || __v850__
+# define stat kernelstat
+# define stat64 kernelstat64
+# include <asm/stat.h>
+# undef stat
+# undef stat64
+#else
+# define kernelstat stat
+# define kernelstat64 stat64
+#endif
+
 #define COPY_STATDATA	\
   req->statdata->st_dev     = statdata.st_dev;		\
   req->statdata->st_ino     = statdata.st_ino;		\
@@ -264,11 +283,9 @@ aio_proc (void *thr_arg)
   _syscall3(int,open,char *,pathname,int,flags,mode_t,mode)
   _syscall1(int,close,int,fd)
 
-#define arch64 (__ia64 || __alpha)
-
-#if __NR_pread64 && !arch64
-  _syscall5(int,pread64,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
-  _syscall5(int,pwrite64,int,fd,char *,buf,size_t,count,unsigned int,offset_lo,unsigned int,offset_hi)
+#if __NR_pread64
+  _syscall5(int,pread64,int,fd,char *,buf,size_t,count,unsigned int,offset_lh,unsigned int,offset_hl)
+  _syscall5(int,pwrite64,int,fd,char *,buf,size_t,count,unsigned int,offset_lh,unsigned int,offset_hl)
 #elif __NR_pread
   _syscall4(int,pread,int,fd,char *,buf,size_t,count,offset_t,offset)
   _syscall4(int,pwrite,int,fd,char *,buf,size_t,count,offset_t,offset)
@@ -277,14 +294,14 @@ aio_proc (void *thr_arg)
 #endif
 
 
-#if __NR_stat64 && !arch64
-  _syscall2(int,stat64, const char *, filename, struct stat64 *, buf)
-  _syscall2(int,lstat64, const char *, filename, struct stat64 *, buf)
-  _syscall2(int,fstat64, int, fd, struct stat64 *, buf)
+#if __NR_stat64
+  _syscall2(int,stat64, const char *, filename, struct kernelstat64 *, buf)
+  _syscall2(int,lstat64, const char *, filename, struct kernelstat64 *, buf)
+  _syscall2(int,fstat64, int, fd, struct kernelstat64 *, buf)
 #elif __NR_stat
-  _syscall2(int,stat, const char *, filename, struct stat *, buf)
-  _syscall2(int,lstat, const char *, filename, struct stat *, buf)
-  _syscall2(int,fstat, int, fd, struct stat *, buf)
+  _syscall2(int,stat, const char *, filename, struct kernelstat *, buf)
+  _syscall2(int,lstat, const char *, filename, struct kernelstat *, buf)
+  _syscall2(int,fstat, int, fd, struct kernelstat *, buf)
 #else
 # error "neither stat64 nor stat defined"
 #endif
@@ -302,20 +319,22 @@ aio_proc (void *thr_arg)
 
       switch (req->type)
         {
-#ifdef __NR_pread64
-          case REQ_READ:   req->result = pread64 (req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32); break;
-          case REQ_WRITE:  req->result = pwrite64(req->fd, req->dataptr, req->length, req->offset & 0xffffffff, req->offset >> 32); break;
+#if __NR_pread64
+          case REQ_READ:   req->result = pread64 (req->fd, req->dataptr, req->length,
+                                                  LONG_LONG_PAIR (req->offset >> 32, req->offset & 0xffffffff)); break;
+          case REQ_WRITE:  req->result = pwrite64(req->fd, req->dataptr, req->length,
+                                                  LONG_LONG_PAIR (req->offset >> 32, req->offset & 0xffffffff)); break;
 #else
           case REQ_READ:   req->result = pread   (req->fd, req->dataptr, req->length, req->offset); break;
           case REQ_WRITE:  req->result = pwrite  (req->fd, req->dataptr, req->length, req->offset); break;
 #endif
-#ifdef __NR_stat64
-          struct stat64 statdata;
+#if __NR_stat64
+          struct kernelstat64 statdata;
           case REQ_STAT:   req->result = stat64  (req->dataptr, &statdata); COPY_STATDATA; break;
           case REQ_LSTAT:  req->result = lstat64 (req->dataptr, &statdata); COPY_STATDATA; break;
           case REQ_FSTAT:  req->result = fstat64 (req->fd, &statdata);      COPY_STATDATA; break;
 #else
-          struct stat statdata;
+          struct kernelstat statdata;
           case REQ_STAT:   req->result = stat    (req->dataptr, &statdata); COPY_STATDATA; break;
           case REQ_LSTAT:  req->result = lstat   (req->dataptr, &statdata); COPY_STATDATA; break;
           case REQ_FSTAT:  req->result = fstat   (req->fd, &statdata);      COPY_STATDATA; break;

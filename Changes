@@ -1,5 +1,13 @@
 Revision history for Linux::AIO
 
+1.6 Fri Jul  8 01:17:04 CEST 2005
+	- works on: ia32, amd64, alpha, sparc64.
+        - likely works on: ia64, powerpc, mips, s390, m68k, mips, arm.
+        - unlikely to work on: hppa, v850.
+        - added changes for alpha, ia64, sparc64, hppa, v850 (thanks to Stefan Traby who
+          dedusted his old machines).
+        - added t/02_read.t.
+
 1.51 Sat Jul  2 15:18:21 CEST 2005
 	- works on: ia32, amd64.
         - likely works on: powerpc, mips, s390, sparc, m68k, mips, arm.
