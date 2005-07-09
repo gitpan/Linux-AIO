@@ -16,13 +16,20 @@ typedef void *InputStream;  /* hack, but 5.6.1 is simply toooo old ;) */
 typedef void *OutputStream; /* hack, but 5.6.1 is simply toooo old ;) */
 typedef void *InOutStream;  /* hack, but 5.6.1 is simply toooo old ;) */
 
-// 128 seems to be enough most everywhere. alpha needs 256.
-#define STACKSIZE (256 * sizeof (long))
+#if __i386 || __amd64
+# define STACKSIZE ( 256 * sizeof (long))
+#elif __ia64
+# define STACKSIZE (8192 * sizeof (long))
+#else
+# define STACKSIZE ( 512 * sizeof (long))
+#endif
 
 enum {
   REQ_QUIT,
-  REQ_OPEN, REQ_CLOSE, REQ_READ, REQ_WRITE,
-  REQ_STAT, REQ_LSTAT, REQ_FSTAT, REQ_UNLINK
+  REQ_OPEN, REQ_CLOSE,
+  REQ_READ, REQ_WRITE, REQ_READAHEAD,
+  REQ_STAT, REQ_LSTAT, REQ_FSTAT, REQ_UNLINK,
+  REQ_FSYNC, REQ_FDATASYNC,
 };
 
 typedef struct {
@@ -66,7 +73,7 @@ start_thread (void)
   New (0, thr, 1, aio_thread);
 
   if (clone (aio_proc,
-             &(thr->stack[STACKSIZE - sizeof (long)]),
+             &(thr->stack[STACKSIZE - 16]),
              CLONE_VM|CLONE_FS|CLONE_FILES,
              thr) >= 0)
     started++;
@@ -234,13 +241,8 @@ static sigset_t fullsigset;
 
 #undef errno
 #include <asm/unistd.h>
+#include <linux/types.h>
 #include <sys/prctl.h>
-
-#if BYTE_ORDER == LITTLE_ENDIAN
-# define LONG_LONG_PAIR(HI, LO) LO, HI
-#elif BYTE_ORDER == BIG_ENDIAN
-# define LONG_LONG_PAIR(HI, LO) HI, LO
-#endif
 
 #if __alpha || __ia64 || __hppa || __v850__
 # define stat kernelstat
@@ -277,37 +279,48 @@ aio_proc (void *thr_arg)
 
   /* this is very much kernel-specific :(:(:( */
   /* we rely on gcc's ability to create closures. */
-  _syscall3(int,read,int,fd,char *,buf,size_t,count)
-  _syscall3(int,write,int,fd,char *,buf,size_t,count)
+  _syscall3(__kernel_size_t, read , unsigned int, fd, char *, buf, __kernel_size_t, count)
+  _syscall3(__kernel_size_t, write, unsigned int, fd, char *, buf, __kernel_size_t, count)
 
-  _syscall3(int,open,char *,pathname,int,flags,mode_t,mode)
-  _syscall1(int,close,int,fd)
+  _syscall3(long, open, char *, pathname, int, flags, int, mode)
+  _syscall1(long, close, unsigned int, fd)
+  _syscall1(long, unlink, char *, filename);
+  _syscall1(long, fsync, unsigned int, fd);
 
-#if __NR_pread64
-  _syscall5(int,pread64,int,fd,char *,buf,size_t,count,unsigned int,offset_lh,unsigned int,offset_hl)
-  _syscall5(int,pwrite64,int,fd,char *,buf,size_t,count,unsigned int,offset_lh,unsigned int,offset_hl)
-#elif __NR_pread
-  _syscall4(int,pread,int,fd,char *,buf,size_t,count,offset_t,offset)
-  _syscall4(int,pwrite,int,fd,char *,buf,size_t,count,offset_t,offset)
-#else
-# error "neither pread nor pread64 defined"
+#ifndef __NR_fdatasync
+# define __NR_fdatasync __NR_fsync
+#endif
+  _syscall1(long, fdatasync, unsigned int, fd);
+
+#if BYTE_ORDER == LITTLE_ENDIAN
+# define LOFF_ARG(off) (off & 0xffffffff), (off >> 32)
+#elif BYTE_ORDER == BIG_ENDIAN
+# define LOFF_ARG(off) (off >> 32), (off & 0xffffffff)
 #endif
 
+#ifndef __NR_pread64
+# define __NR_pread64 __NR_pread
+# define __NR_pwrite64 __NR_write
+#endif
+  _syscall5(__kernel_ssize_t, pread64 , unsigned int, fd, char *, buf,
+            __kernel_size_t, count, unsigned int, offset_lh, unsigned int, offset_hl)
+  _syscall5(__kernel_ssize_t, pwrite64, unsigned int, fd, char *, buf,
+            __kernel_size_t, count, unsigned int, offset_lh, unsigned int, offset_hl)
+  _syscall4(long, readahead, unsigned int, fd, unsigned int, offset_lh, unsigned int, offset_hl, __kernel_size_t, count);
 
 #if __NR_stat64
-  _syscall2(int,stat64, const char *, filename, struct kernelstat64 *, buf)
-  _syscall2(int,lstat64, const char *, filename, struct kernelstat64 *, buf)
-  _syscall2(int,fstat64, int, fd, struct kernelstat64 *, buf)
+  _syscall2(long, stat64 , const char *, filename, struct kernelstat64 *, buf)
+  _syscall2(long, lstat64, const char *, filename, struct kernelstat64 *, buf)
+  _syscall2(long, fstat64, int         , fd      , struct kernelstat64 *, buf)
 #elif __NR_stat
-  _syscall2(int,stat, const char *, filename, struct kernelstat *, buf)
-  _syscall2(int,lstat, const char *, filename, struct kernelstat *, buf)
-  _syscall2(int,fstat, int, fd, struct kernelstat *, buf)
+  _syscall2(long, stat , const char *, filename, struct kernelstat *, buf)
+  _syscall2(long, lstat, const char *, filename, struct kernelstat *, buf)
+  _syscall2(long, fstat, int         , fd      , struct kernelstat *, buf)
 #else
 # error "neither stat64 nor stat defined"
 #endif
 
-  _syscall1(int,unlink, char *, filename);
-
+  /* the following two calls might clobber errno */
   sigprocmask (SIG_SETMASK, &fullsigset, 0);
   prctl (PR_SET_PDEATHSIG, SIGKILL);
 
@@ -319,34 +332,36 @@ aio_proc (void *thr_arg)
 
       switch (req->type)
         {
-#if __NR_pread64
-          case REQ_READ:   req->result = pread64 (req->fd, req->dataptr, req->length,
-                                                  LONG_LONG_PAIR (req->offset >> 32, req->offset & 0xffffffff)); break;
-          case REQ_WRITE:  req->result = pwrite64(req->fd, req->dataptr, req->length,
-                                                  LONG_LONG_PAIR (req->offset >> 32, req->offset & 0xffffffff)); break;
-#else
-          case REQ_READ:   req->result = pread   (req->fd, req->dataptr, req->length, req->offset); break;
-          case REQ_WRITE:  req->result = pwrite  (req->fd, req->dataptr, req->length, req->offset); break;
-#endif
+          case REQ_READ:      req->result = pread64   (req->fd, req->dataptr, req->length, LOFF_ARG (req->offset)); break;
+          case REQ_WRITE:     req->result = pwrite64  (req->fd, req->dataptr, req->length, LOFF_ARG (req->offset)); break;
+          case REQ_READAHEAD: req->result = readahead (req->fd, LOFF_ARG (req->offset), req->length); break;
+
 #if __NR_stat64
           struct kernelstat64 statdata;
-          case REQ_STAT:   req->result = stat64  (req->dataptr, &statdata); COPY_STATDATA; break;
-          case REQ_LSTAT:  req->result = lstat64 (req->dataptr, &statdata); COPY_STATDATA; break;
-          case REQ_FSTAT:  req->result = fstat64 (req->fd, &statdata);      COPY_STATDATA; break;
+          case REQ_STAT:      req->result = stat64    (req->dataptr, &statdata); COPY_STATDATA; break;
+          case REQ_LSTAT:     req->result = lstat64   (req->dataptr, &statdata); COPY_STATDATA; break;
+          case REQ_FSTAT:     req->result = fstat64   (req->fd     , &statdata); COPY_STATDATA; break;
 #else
           struct kernelstat statdata;
-          case REQ_STAT:   req->result = stat    (req->dataptr, &statdata); COPY_STATDATA; break;
-          case REQ_LSTAT:  req->result = lstat   (req->dataptr, &statdata); COPY_STATDATA; break;
-          case REQ_FSTAT:  req->result = fstat   (req->fd, &statdata);      COPY_STATDATA; break;
+          case REQ_STAT:      req->result = stat      (req->dataptr, &statdata); COPY_STATDATA; break;
+          case REQ_LSTAT:     req->result = lstat     (req->dataptr, &statdata); COPY_STATDATA; break;
+          case REQ_FSTAT:     req->result = fstat     (req->fd     , &statdata); COPY_STATDATA; break;
 #endif
-          case REQ_OPEN:   req->result = open    (req->dataptr, req->fd, req->mode); break;
-          case REQ_CLOSE:  req->result = close   (req->fd); break;
-          case REQ_UNLINK: req->result = unlink  (req->dataptr); break;
+
+          case REQ_OPEN:      req->result = open      (req->dataptr, req->fd, req->mode); break;
+          case REQ_CLOSE:     req->result = close     (req->fd); break;
+          case REQ_UNLINK:    req->result = unlink    (req->dataptr); break;
+
+          case REQ_FSYNC:     req->result = fsync     (req->fd); break;
+          case REQ_FDATASYNC: req->result = fdatasync (req->fd); break;
 
           case REQ_QUIT:
-          default:
             write (respipe[1], (void *)&req, sizeof (req));
             return 0;
+
+          default:
+            req->result = ENOSYS;
+            break;
         }
 
       req->errorno = errno;
@@ -431,6 +446,10 @@ aio_close(fh,callback)
         InputStream	fh
         SV *		callback
 	PROTOTYPE: $$
+        ALIAS:
+           aio_close     = REQ_CLOSE
+           aio_fsync     = REQ_FSYNC
+           aio_fdatasync = REQ_FDATASYNC
 	CODE:
         aio_req req;
 
@@ -439,7 +458,7 @@ aio_close(fh,callback)
         if (!req)
           croak ("out of memory during aio_req allocation");
 
-        req->type = REQ_CLOSE;
+        req->type = ix;
         req->fd = PerlIO_fileno (fh);
         req->callback = SvREFCNT_inc (callback);
 

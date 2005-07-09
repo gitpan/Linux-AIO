@@ -2,23 +2,23 @@ use ExtUtils::MakeMaker;
 
 use Config;
 
-$Config{cppsymbols} =~ /__i386=1/ or print <<EOF;
+print <<EOF;
 
-WARNING: This module is architecture-dependent and currently only
-         tested on some architectures. If the module (esp. aio_read and
-         aio_write) doesn't work, please report this and I'll fix it for
-         you. I promise ;)
+WARNING: This module is architecture-dependent and will not likely work
+         on lesser-used architectures (see Changes). If the module (esp.
+         aio_read and aio_write) doesn't work, please report this and I'll
+         fix it for you. I promise ;)
 
 EOF
 
 $Config{osvers} >= 2.4 or print <<EOF;
 
 WARNING: This module requires 64 bit file offset functionality only found
-         in linux-2.4 and later You might still compile this module on older linuxes,
-         but it won't run.
+         in linux-2.4 and later. You can still compile this module on
+         older linuxes, but it won't run.
 
-DEVELOPERS: It is not difficult to get rid of this limitation, ask me and I'll tell
-            you what you need to change (and test, so I can add it!).
+DEVELOPERS: It is not difficult to get rid of this limitation, ask me and
+            I'll tell you what you need to change (and test, so I can add it!).
 
 EOF
 
