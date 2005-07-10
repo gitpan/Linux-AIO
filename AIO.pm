@@ -38,6 +38,11 @@ been executed asynchronously.
 
 All functions that expect a filehandle will also accept a file descriptor.
 
+The filenames you pass to these routines I<must> be absolute. The reason
+is that at the time the request is being executed, the current working
+directory could have changed. Alternatively, you can make sure that you
+never change the current working directory.
+
 =over 4
 
 =cut
@@ -47,7 +52,7 @@ package Linux::AIO;
 use base 'Exporter';
 
 BEGIN {
-   $VERSION = 1.7;
+   $VERSION = 1.71;
 
    @EXPORT = qw(aio_read aio_write aio_open aio_close aio_stat aio_lstat aio_unlink
                 aio_fsync aio_fdatasync aio_readahead);
@@ -116,13 +121,17 @@ Returns the number of requests currently outstanding.
 
 Example: wait till there are no outstanding requests anymore:
 
-   Linux::AIO::poll_wait while Linux::AIO::nreqs;
+   Linux::AIO::poll_wait, Linux::AIO::poll_cb
+      while Linux::AIO::nreqs;
 
 =item aio_open $pathname, $flags, $mode, $callback
 
 Asynchronously open or create a file and call the callback with the
 filedescriptor (NOT a perl filehandle, sorry for that, but watch out, this
 might change in the future).
+
+The pathname passed to C<aio_open> must be absolute. See API NOTES, above,
+for an explanation.
 
 The C<$mode> argument is a bitmask. See the C<Fcntl> module for a
 list. They are the same as used in C<sysopen>.
@@ -183,6 +192,9 @@ Works like perl's C<stat> or C<lstat> in void context. The callback will
 be called after the stat and the results will be available using C<stat _>
 or C<-s _> etc...
 
+The pathname passed to C<aio_stat> must be absolute. See API NOTES, above,
+for an explanation.
+
 Currently, the stats are always 64-bit-stats, i.e. instead of returning an
 error when stat'ing a large file, the results will be silently truncated
 unless perl itself is compiled with large file support.
@@ -230,7 +242,7 @@ for many years now.
 
 =head1 SEE ALSO
 
-L<Coro>.
+L<Coro>, L<IO::AIO>.
 
 =head1 AUTHOR
 

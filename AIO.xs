@@ -404,6 +404,7 @@ max_parallel(nthreads)
 	int	nthreads
 	PROTOTYPE: $
         CODE:
+{
         int cur = started;
         while (cur > nthreads)
           {          
@@ -416,6 +417,7 @@ max_parallel(nthreads)
             poll_wait ();
             poll_cb (aTHX);
           }
+}
 
 void
 aio_open(pathname,flags,mode,callback)
@@ -425,6 +427,7 @@ aio_open(pathname,flags,mode,callback)
         SV *	callback
 	PROTOTYPE: $$$$
 	CODE:
+{
         aio_req req;
 
         Newz (0, req, 1, aio_cb);
@@ -440,6 +443,7 @@ aio_open(pathname,flags,mode,callback)
         req->callback = SvREFCNT_inc (callback);
 
         send_req (req);
+}
 
 void
 aio_close(fh,callback)
@@ -451,6 +455,7 @@ aio_close(fh,callback)
            aio_fsync     = REQ_FSYNC
            aio_fdatasync = REQ_FDATASYNC
 	CODE:
+{
         aio_req req;
 
         Newz (0, req, 1, aio_cb);
@@ -463,6 +468,7 @@ aio_close(fh,callback)
         req->callback = SvREFCNT_inc (callback);
 
         send_req (req);
+}
 
 void
 aio_read(fh,offset,length,data,dataoffset,callback)
@@ -489,6 +495,34 @@ aio_write(fh,offset,length,data,dataoffset,callback)
         read_write (aTHX_ 1, PerlIO_fileno (fh), offset, length, data, dataoffset, callback);
 
 void
+aio_readahead(fh,offset,length,callback)
+        InputStream	fh
+        UV		offset
+        IV		length
+        SV *		callback
+	PROTOTYPE: $$$$
+        CODE:
+{
+        aio_req req;
+
+        if (length < 0)
+          croak ("length must not be negative");
+
+        Newz (0, req, 1, aio_cb);
+
+        if (!req)
+          croak ("out of memory during aio_req allocation");
+
+        req->type = REQ_READAHEAD;
+        req->fd = PerlIO_fileno (fh);
+        req->offset = offset;
+        req->length = length;
+        req->callback = SvREFCNT_inc (callback);
+
+        send_req (req);
+}
+
+void
 aio_stat(fh_or_path,callback)
         SV *		fh_or_path
         SV *		callback
@@ -496,6 +530,7 @@ aio_stat(fh_or_path,callback)
         ALIAS:
            aio_lstat = 1
 	CODE:
+{
         aio_req req;
 
         Newz (0, req, 1, aio_cb);
@@ -523,6 +558,7 @@ aio_stat(fh_or_path,callback)
         req->callback = SvREFCNT_inc (callback);
 
         send_req (req);
+}
 
 void
 aio_unlink(pathname,callback)
@@ -530,6 +566,7 @@ aio_unlink(pathname,callback)
 	SV * callback
 	PROTOTYPE: $$
 	CODE:
+{
 	aio_req req;
 	
 	Newz (0, req, 1, aio_cb);
@@ -543,6 +580,7 @@ aio_unlink(pathname,callback)
 	req->callback = SvREFCNT_inc (callback);
 	
 	send_req (req);
+}
 
 int
 poll_fileno()

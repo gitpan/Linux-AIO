@@ -1,9 +1,16 @@
 Revision history for Linux::AIO
 
+* works on: ia32, amd64, alpha, sparc64.
+* likely works on: ia64, s390, m68k, arm.
+* unlikely to work on: hppa, v850, sparc32, mips64, ppc64.
+
+1.71 Sun Jul 10 19:11:36 CEST 2005
+	- aio_readahead was missing in 1.7.
+        - xs fixes for some perls.
+        - remind people to use absolute paths.
+        - add reference to IO::AIO, it's brother.
+
 1.7 Sun Jul 10 01:40:00 CEST 2005
-	- works on: ia32, amd64, alpha, sparc64.
-        - likely works on: ia64, s390, m68k, arm.
-        - unlikely to work on: hppa, v850, sparc32, mips64, ppc64.
 	- further cleanups and simplifications.
         - new functions: aio_fsync, aio_fdatasync, aio_readahead.
         - vastly improved documentation.

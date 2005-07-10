@@ -35,6 +35,11 @@ DESCRIPTION
     All functions that expect a filehandle will also accept a file
     descriptor.
 
+    The filenames you pass to these routines *must* be absolute. The reason
+    is that at the time the request is being executed, the current working
+    directory could have changed. Alternatively, you can make sure that you
+    never change the current working directory.
+
     Linux::AIO::min_parallel $nthreads
         Set the minimum number of AIO threads to $nthreads. The default is
         1, which means a single asynchronous operation can be done at one
@@ -89,12 +94,16 @@ DESCRIPTION
 
         Example: wait till there are no outstanding requests anymore:
 
-           Linux::AIO::poll_wait while Linux::AIO::nreqs;
+           Linux::AIO::poll_wait, Linux::AIO::poll_cb
+              while Linux::AIO::nreqs;
 
     aio_open $pathname, $flags, $mode, $callback
         Asynchronously open or create a file and call the callback with the
         filedescriptor (NOT a perl filehandle, sorry for that, but watch
         out, this might change in the future).
+
+        The pathname passed to "aio_open" must be absolute. See API NOTES,
+        above, for an explanation.
 
         The $mode argument is a bitmask. See the "Fcntl" module for a list.
         They are the same as used in "sysopen".
@@ -151,6 +160,9 @@ DESCRIPTION
         will be called after the stat and the results will be available
         using "stat _" or "-s _" etc...
 
+        The pathname passed to "aio_stat" must be absolute. See API NOTES,
+        above, for an explanation.
+
         Currently, the stats are always 64-bit-stats, i.e. instead of
         returning an error when stat'ing a large file, the results will be
         silently truncated unless perl itself is compiled with large file
@@ -182,7 +194,7 @@ BUGS
        - aio_open gives a fd, but all other functions expect a perl filehandle.
 
 SEE ALSO
-    Coro.
+    Coro, IO::AIO.
 
 AUTHOR
      Marc Lehmann <schmorp@schmorp.de>
