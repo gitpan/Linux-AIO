@@ -52,7 +52,7 @@ package Linux::AIO;
 use base 'Exporter';
 
 BEGIN {
-   $VERSION = 1.71;
+   $VERSION = 1.72;
 
    @EXPORT = qw(aio_read aio_write aio_open aio_close aio_stat aio_lstat aio_unlink
                 aio_fsync aio_fdatasync aio_readahead);
@@ -140,8 +140,7 @@ Example:
 
    aio_open "/etc/passwd", O_RDONLY, 0, sub {
       if ($_[0] >= 0) {
-         open my $fh, "<&$_[0]";   # create a copy for perl
-         aio_close $_[0], sub { }; # close the aio handle
+         open my $fh, "<&=$_[0]";
          print "open successful, fh is $fh\n";
          ...
       } else {

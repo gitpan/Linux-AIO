@@ -171,6 +171,9 @@ read_write (pTHX_
 static void
 poll_wait ()
 {
+  if (!nreqs)
+    return;
+
   fd_set rfd;
   FD_ZERO(&rfd);
   FD_SET(respipe[0], &rfd);
@@ -240,7 +243,7 @@ poll_cb (pTHX)
 static sigset_t fullsigset;
 
 #undef errno
-#include <asm/unistd.h>
+#include <linux/unistd.h>
 #include <linux/types.h>
 #include <sys/prctl.h>
 

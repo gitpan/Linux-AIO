@@ -4,6 +4,9 @@ Revision history for Linux::AIO
 * likely works on: ia64, s390, m68k, arm.
 * unlikely to work on: hppa, v850, sparc32, mips64, ppc64.
 
+	- return immediately from poll_wait if nreqs==0.
+        - use <linux/unistd.h> and try to make it work.
+
 1.71 Sun Jul 10 19:11:36 CEST 2005
 	- aio_readahead was missing in 1.7.
         - xs fixes for some perls.

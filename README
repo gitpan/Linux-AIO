@@ -112,8 +112,7 @@ DESCRIPTION
 
            aio_open "/etc/passwd", O_RDONLY, 0, sub {
               if ($_[0] >= 0) {
-                 open my $fh, "<&$_[0]";   # create a copy for perl
-                 aio_close $_[0], sub { }; # close the aio handle
+                 open my $fh, "<&=$_[0]";
                  print "open successful, fh is $fh\n";
                  ...
               } else {
