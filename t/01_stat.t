@@ -1,66 +1,66 @@
-$| = 1;
+#!/usr/bin/perl
 
-if (-f "/etc/passwd" and -d "/etc") {
-   print "1..10\n";
-} else {
-   print "1..0 # Skipped: unexpected /etc and/or /etc/passwd\n";
-   exit;
-}
+use strict;
+use Fcntl;
+use FindBin;
+use lib "$FindBin::Bin";
+use aio_test_common;
+use Test;
 
 # relies on /etc/passwd to exist...
-
-use Fcntl;
-use Linux::AIO;
+BEGIN {
+    if (-f "/etc/passwd" and -d "/etc") {
+        plan tests => 10;
+    } else {
+        print "1..0 # Skipped: unexpected /etc and/or /etc/passwd\n";
+            exit;
+    }
+}
 
 Linux::AIO::min_parallel 2;
 
-sub pcb {
-   while (Linux::AIO::nreqs) {
-      my $rfd = ""; vec ($rfd, Linux::AIO::poll_fileno, 1) = 1; select $rfd, undef, undef, undef;
-      Linux::AIO::poll_cb;
-   }
-}
+my ($pwd, @pwd);
 
 aio_open "/etc/passwd", O_RDONLY, 0, sub {
-   print $_[0] >= 0 ? "ok" : "not ok", " 1\n";
-   $pwd = $_[0];
+    ok($_[0] >= 0);
+    $pwd = $_[0];
 };
 
 pcb;
 
 aio_stat "/etc", sub {
-   print -d _ ? "ok" : "not ok", " 2\n";
+    ok(-d _);
 };
 
 pcb;
 
 aio_stat "/etc/passwd", sub {
-   @pwd = stat _;
-   print -f _ ? "ok" : "not ok", " 3\n";
-   print eval  { lstat _; 1 }  ? "not ok" : "ok", " 4\n";
+    @pwd = stat _;
+    ok(-f _);
+    ok(! eval  { lstat _; 1 });
 };
 
 pcb;
 
 aio_lstat "/etc/passwd", sub {
    lstat _;
-   print -f _ ? "ok" : "not ok", " 5\n";
-   print eval  { stat _; 1 }  ? "ok" : "not ok", " 6\n";
+   ok(-f _);
+   ok(eval  { stat _; 1 });
 };
 
 pcb;
 
-print open (PWD, "<&$pwd") ? "ok" : "not ok", " 7\n";
+ok(open (PWD, "<&$pwd"));
 
 aio_stat *PWD, sub {
-   print -f _ ? "ok" : "not ok", " 8\n";
-   print +(join ":", @pwd) eq (join ":", stat _) ? "ok" : "not ok", " 9\n";
+    ok(-f _);
+    ok((join ":", @pwd) eq (join ":", stat _));
 };
 
 pcb;
 
 aio_close *PWD, sub {
-   print $_[0] ? "not ok" : "ok", " 10\n";
+    ok(! $_[0]);
 };
 
 pcb;

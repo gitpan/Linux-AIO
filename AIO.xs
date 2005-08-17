@@ -204,7 +204,7 @@ poll_cb (pTHX)
 
           if (req->type == REQ_READ)
             SvCUR_set (req->data, req->dataoffset
-                                  + req->result > 0 ? req->result : 0);
+                                  + (req->result > 0 ? req->result : 0));
 
           if (req->data)
             SvREFCNT_dec (req->data);

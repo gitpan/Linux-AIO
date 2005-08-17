@@ -6,7 +6,12 @@ Linux::AIO - linux-specific aio implemented using clone
 
  use Linux::AIO;
 
+ # This module has been mostly superseded by IO::AIO.
+
 =head1 DESCRIPTION
+
+I<This module has been mostly superseded by IO::AIO, which is API 
+compatible.>
 
 This module implements asynchronous I/O using the means available to Linux
 - clone. It does not hook into the POSIX aio_* functions because Linux
@@ -52,7 +57,7 @@ package Linux::AIO;
 use base 'Exporter';
 
 BEGIN {
-   $VERSION = 1.72;
+   $VERSION = 1.8;
 
    @EXPORT = qw(aio_read aio_write aio_open aio_close aio_stat aio_lstat aio_unlink
                 aio_fsync aio_fdatasync aio_readahead);

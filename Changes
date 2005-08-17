@@ -1,11 +1,18 @@
 Revision history for Linux::AIO
 
-* works on: ia32, amd64, alpha, sparc64.
-* likely works on: ia64, s390, m68k, arm.
-* unlikely to work on: hppa, v850, sparc32, mips64, ppc64.
+This module has been mostly superseded by IO::AIO, which is API
+compatible.
 
+* works on: ia32, amd64, alpha, sparc64.
+* likely works on: s390, m68k, arm.
+* unlikely to work on: ia64, hppa, v850, sparc32, mips64, ppc64.
+
+1.8  Wed Aug 17 18:56:14 CEST 2005
 	- return immediately from poll_wait if nreqs==0.
         - use <linux/unistd.h> and try to make it work.
+        - replaced tests by better ones by Brad Fitzpatrick.
+        - fix a bug where the data scalar would be truncated if
+          the data offset is != 0.
 
 1.71 Sun Jul 10 19:11:36 CEST 2005
 	- aio_readahead was missing in 1.7.

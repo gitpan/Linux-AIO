@@ -4,7 +4,12 @@ NAME
 SYNOPSIS
      use Linux::AIO;
 
+     # This module has been mostly superseded by IO::AIO.
+
 DESCRIPTION
+    *This module has been mostly superseded by IO::AIO, which is API
+    compatible.*
+
     This module implements asynchronous I/O using the means available to
     Linux - clone. It does not hook into the POSIX aio_* functions because
     Linux does not yet support these in the kernel (even as of 2.6.12, only
