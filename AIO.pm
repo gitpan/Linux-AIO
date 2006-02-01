@@ -57,7 +57,7 @@ package Linux::AIO;
 use base 'Exporter';
 
 BEGIN {
-   $VERSION = 1.8;
+   $VERSION = 1.9;
 
    @EXPORT = qw(aio_read aio_write aio_open aio_close aio_stat aio_lstat aio_unlink
                 aio_fsync aio_fdatasync aio_readahead);

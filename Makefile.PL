@@ -51,6 +51,11 @@ if ($Config{cppsymbols} =~ /__i386=1/) {
    for ($mm->{CCDLFLAGS}, $mm->{CCCDLFLAGS}, @{$mm->{RESULT}}) {
       s/\B-f(pic|PIC)\b//g
    }
+
+   # Put -O at the front so as not to change any existing optimisation level
+   # Need optimization of some form turned on to inline syscall() so that it
+   # sets the local errno
+   $mm->{OPTIMIZE} = '-O ' . $mm->{OPTIMIZE};
 }
 
 $mm->flush;

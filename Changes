@@ -7,6 +7,10 @@ compatible.
 * likely works on: s390, m68k, arm.
 * unlikely to work on: ia64, hppa, v850, sparc32, mips64, ppc64.
 
+1.9  Thu Feb  2 00:46:46 CET 2006
+	- added patch by Nicholas Clark to force optimization,
+          which is required for syscalls to be inlined on ia32.
+
 1.8  Wed Aug 17 18:56:14 CEST 2005
 	- return immediately from poll_wait if nreqs==0.
         - use <linux/unistd.h> and try to make it work.
@@ -18,7 +22,7 @@ compatible.
 	- aio_readahead was missing in 1.7.
         - xs fixes for some perls.
         - remind people to use absolute paths.
-        - add reference to IO::AIO, it's brother.
+        - add reference to IO::AIO, its brother.
 
 1.7 Sun Jul 10 01:40:00 CEST 2005
 	- further cleanups and simplifications.
